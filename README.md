@@ -43,4 +43,4 @@ If you don't know how to do a step, just ask Chatgpt or any AI tools
 ### Purpose of these tasks
 1. Proves you can code (with or without AI)
 2. You have experience using Git/Github
-3. You have real experience of publishing a packaged
+3. You have real experience of publishing a package
