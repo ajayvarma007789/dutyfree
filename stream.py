@@ -1,11 +1,13 @@
 import json
 import re
+import os
 import streamlit as st
 from datetime import datetime
 from fpdf import FPDF
+import requests
+from groq import Groq
 
 def load_templates():
-    
     try:
         with open("templates.json", "r") as file:
             return json.load(file)
@@ -14,7 +16,6 @@ def load_templates():
         st.stop()
 
 def validate_date(date_str):
-    
     try:
         datetime.strptime(date_str, "%d-%m-%Y")
         return date_str
@@ -22,11 +23,43 @@ def validate_date(date_str):
         return None
 
 def validate_contact_number(number):
-    
     return number if re.fullmatch(r"\d{10,12}", number) else None
 
+def generate_ai_leave_letter(data):
+    """Generates a leave letter using Groq AI based on user input."""
+
+    # Load API key from environment variable (set this in your system before running)
+    api_key = "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"  # Set this in your environment before running
+    if not api_key:
+        return "Error: Groq API key is missing! Please set the environment variable 'GROQ_API_KEY'."
+
+    # Initialize Groq client
+    client = Groq(api_key="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")
+
+    # Create AI prompt with user data
+    prompt = (
+        f"Generate a professional leave letter for {data['user']} in {data['year_of_study']} year, {data['programme']} ({data['department']}). "
+        f"The letter should be addressed to {data['subto']} requesting leave from {data['start_date']} to {data['end_date']}. "
+        f"The reason for leave is: {data['extra_details']}. "
+        f"Please format it formally with a polite tone. Include the contact number {data['contact_number']}."
+    )
+
+    # Make API call to Groq AI
+    try:
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "You are an AI assistant that generates professional leave letters."},
+                {"role": "user", "content": prompt}
+            ],
+            model="llama-3.3-70b-versatile"
+        )
+
+        return response.choices[0].message.content if response.choices else "Error: No response from AI."
+
+    except Exception as e:
+        return f"Error generating letter: {str(e)}"
+
 def chat_interface():
-    
     st.title("💬 Leave Letter Chatbot")
     
     if "messages" not in st.session_state:
@@ -94,8 +127,10 @@ def chat_interface():
     return None, None
 
 def generate_leave_letter(data, templates, signature_path=None):
-
-    letter_content = templates.get(data['template'], "Dear {subto},\n\nI am {user} from {year_of_study} year, {programme} ({department}).\n\nReason: {extra_details}\n\nLeave: {start_date} to {end_date}\n\nThank you.").format(**data)
+    if data['template'] == "AI-generated":
+        letter_content = generate_ai_leave_letter(data)
+    else:
+        letter_content = templates.get(data['template'], "Dear {subto},\n\nI am {user} from {year_of_study} year, {programme} ({department}).\n\nReason: {extra_details}\n\nLeave: {start_date} to {end_date}\n\nThank you.").format(**data)
     
     pdf = FPDF()
     pdf.add_page()
@@ -114,7 +149,6 @@ def generate_leave_letter(data, templates, signature_path=None):
         st.download_button("📥 Download Leave Letter", file, file_name=output_file, mime="application/pdf")
 
 def main():
-    """Run the chatbot."""
     leave_data, signature_path = chat_interface()
     if leave_data:
         generate_leave_letter(leave_data, load_templates(), signature_path)
