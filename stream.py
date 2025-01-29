@@ -28,15 +28,12 @@ def validate_contact_number(number):
 def generate_ai_leave_letter(data):
     """Generates a leave letter using Groq AI based on user input."""
 
-    # Load API key from environment variable (set this in your system before running)
-    api_key = "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"  # Set this in your environment before running
+    api_key = "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" 
     if not api_key:
         return "Error: Groq API key is missing! Please set the environment variable 'GROQ_API_KEY'."
 
-    # Initialize Groq client
     client = Groq(api_key="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")
 
-    # Create AI prompt with user data
     prompt = (
         f"Generate a professional leave letter for {data['user']} in {data['year_of_study']} year, {data['programme']} ({data['department']}). "
         f"The letter should be addressed to {data['subto']} requesting leave from {data['start_date']} to {data['end_date']}. "
@@ -44,7 +41,6 @@ def generate_ai_leave_letter(data):
         f"Please format it formally with a polite tone. Include the contact number {data['contact_number']}."
     )
 
-    # Make API call to Groq AI
     try:
         response = client.chat.completions.create(
             messages=[
