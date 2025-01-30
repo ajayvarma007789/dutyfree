@@ -6,6 +6,7 @@ from datetime import datetime
 from fpdf import FPDF
 import requests
 from groq import Groq
+from dotenv import load_dotenv  
 
 def load_templates():
     try:
@@ -26,13 +27,12 @@ def validate_contact_number(number):
     return number if re.fullmatch(r"\d{10,12}", number) else None
 
 def generate_ai_leave_letter(data):
-    """Generates a leave letter using Groq AI based on user input."""
-
-    api_key = "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" 
+    load_dotenv()
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         return "Error: Groq API key is missing! Please set the environment variable 'GROQ_API_KEY'."
 
-    client = Groq(api_key="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")
+    client = Groq(api_key=api_key)
 
     prompt = (
         f"Generate a professional leave letter for {data['user']} in {data['year_of_study']} year, {data['programme']} ({data['department']}). "
