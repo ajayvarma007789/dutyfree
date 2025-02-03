@@ -37,7 +37,7 @@ def validate_date(date_str):
 def validate_contact(number):
     return number if re.fullmatch(r"\d{10,12}", number) else None
 
-# AI-Powered Leave Letter Generation
+# AI Leave Letter Generation
 def generate_ai_leave_letter(data, faculty_df):
     load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
@@ -47,7 +47,7 @@ def generate_ai_leave_letter(data, faculty_df):
     
     client = Groq(api_key=api_key)
     
-    # Get faculty designation if the letter is addressed to a faculty member
+    # Get faculty designation 
     faculty_designation = ""
     recipient_line = ""
     sir_madam = ""
@@ -62,7 +62,7 @@ def generate_ai_leave_letter(data, faculty_df):
             recipient_line = f"{data['subto']}\n{faculty_designation}\n{faculty_info.iloc[0]['Department']}"
             sir_madam = "Sir/Madam"
     
-    # Create a more detailed prompt with faculty designation and college address
+    # AI Prompt
     prompt = f"""
     Write a formal leave letter using the following format:
 
@@ -83,9 +83,8 @@ def generate_ai_leave_letter(data, faculty_df):
 
     Request leave from {data['start_date']} to {data['end_date']}.
     Reason: {data['extra_details']}
-    My contact number: {data['contact_number']}
 
-    Format it professionally with a polite tone as it is given to college and include proper closing with Thanking you and Yours faithfully.
+    Format it professionally having 1-3 paragraphs with a polite tone as it is given to college and include proper closing with Thanking you and Yours faithfully.In the closing section, do not want to mention the department name and college name again.
     """
     
     try:
@@ -238,11 +237,11 @@ def chat_interface():
         if st.button("✅ Generate Leave Letter"):
             return st.session_state.leave_data, signature_path
 
-    # Return None, None if we haven't reached the final step or the generate button hasn't been clicked
+    # Return None if the process is not completed
     return None, None
-# PDF Generator
+
 def generate_leave_letter(data, templates, faculty_df, signature_path=None):
-    # Get current date
+    
     current_date = datetime.now().strftime("%d-%m-%Y")
     
     # Get recipient with designation
@@ -253,7 +252,7 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         faculty_info = faculty_df[faculty_df['Faculty'] == data['subto']]
         faculty_designation = faculty_info.iloc[0]['Designation'] if not faculty_info.empty else ""
         faculty_department = faculty_info.iloc[0]['Department'] if not faculty_info.empty else ""
-    # Prepare template data
+    
     template_data = {
         **data,  # Include all existing data
         'current_date': current_date,
@@ -264,7 +263,7 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
     if data['template'] == "AI-generated":
         letter_content = generate_ai_leave_letter(data, faculty_df)
     else:
-        # Use the selected template with the enhanced data
+        # Use the selected template with the enhanced data 
         template = templates.get(data['template'])
         letter_content = template.format(**template_data)
 
@@ -272,7 +271,7 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, letter_content)
+    pdf.multi_cell(0, 8, letter_content)
 
     output_file = f"{data['user'].replace(' ', '_')}_leave_letter.pdf"
     pdf.output(output_file)
@@ -280,7 +279,6 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
     with open(output_file, "rb") as file:
         st.download_button("📥 Download Leave Letter", file, file_name=output_file, mime="application/pdf")
 
-# Update the main function to pass faculty_df
 def main():
     faculty_df = load_faculty_list()  # Load faculty list at the start
     leave_data, signature_path = chat_interface()
