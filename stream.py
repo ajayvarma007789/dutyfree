@@ -245,8 +245,6 @@ def chat_interface():
                         st.session_state.messages.append({"role": "assistant", "text": questions[st.session_state.step]})
                     st.rerun()
 
-        # [Previous code remains the same until the date handling section]
-
         elif field_name in ["start_date", "end_date"]:
             if field_name == "start_date":
                 min_date = datetime.now() - timedelta(days=30)  # One month ago
@@ -263,7 +261,6 @@ def chat_interface():
             # Create a container for date selection
             date_container = st.container()
             
-            # Calendar in full width
             with date_container:
                 date_value = st.date_input(
                     "",
@@ -272,7 +269,6 @@ def chat_interface():
                     key=f"{field_name}_calendar"
                 )
                 
-                # Add some spacing
                 st.write("")
                 
                 # Navigation buttons in separate columns below
@@ -350,7 +346,6 @@ def chat_interface():
 def generate_leave_letter(data, templates, faculty_df, signature_path=None):
     current_date = datetime.now().strftime("%d-%m-%Y")
     
-    # Prepare template data with additional placeholders
     template_data = {
         **data,
         'current_date': current_date,
@@ -358,7 +353,6 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         'signature': '[Student Signature]'  # Default placeholder
     }
 
-    # Add faculty details if applicable
     if data['subto'] != "Principal":
         faculty_info = faculty_df[faculty_df['Faculty'] == data['subto']]
         template_data.update({
@@ -401,7 +395,7 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
 
     with open(output_file, "rb") as file:
         st.download_button("📥 Download Leave Letter", file, file_name=output_file, mime="application/pdf")
-        
+
 def main():
     faculty_df = load_faculty_list()  # Load faculty list at the start
     leave_data, signature_path = chat_interface()
