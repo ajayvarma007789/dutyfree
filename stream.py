@@ -113,7 +113,7 @@ st.markdown("""
 
 # Chat Interface Logic
 def chat_interface():
-    st.title("💬 SJCET Leave Letter Chatbot")
+    st.title("💬 DutyFree\nGenerate your apolegy/leave letter within 30sec.\n An AI tool for SJCET Students")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -129,10 +129,9 @@ def chat_interface():
         "📚 Which year do you study?",
         "📅 Select the start date of your leave:",
         "📅 Select the end date of your leave:",
-        "📞 Enter your contact number:"
     ]
 
-    fields = ["user", "programme", "department", "subto", "year_of_study", "start_date", "end_date", "contact_number"]
+    fields = ["user", "programme", "department", "subto", "year_of_study", "start_date", "end_date"]
     programme_options = ["B.Tech", "M.Tech"]
 
     for msg in st.session_state.messages:
@@ -304,11 +303,6 @@ def chat_interface():
 
         # Handle text input validation and progression
         if user_input and field_name not in ["programme", "department", "subto", "year_of_study", "start_date", "end_date"]:
-            if field_name == "contact_number":
-                user_input = validate_contact(user_input)
-                if not user_input:
-                    st.session_state.messages.append({"role": "assistant", "text": "❌ Invalid phone number!"})
-                    st.rerun()
 
             st.session_state.leave_data[field_name] = user_input
             st.session_state.messages.append({"role": "user", "text": user_input})
