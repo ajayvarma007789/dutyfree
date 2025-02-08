@@ -9,6 +9,10 @@ from dotenv import load_dotenv
 from groq import Groq  
 from PIL import Image
 import io
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
+import base64
+from time import time
 
 # Load Templates
 def load_templates():
@@ -341,25 +345,42 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
     current_date = datetime.now().strftime("%d-%m-%Y")
     
     template_data = {
-        **data,
+        'user': data.get('user', ''),
+        'year_of_study': data.get('year_of_study', ''),
+        'programme': data.get('programme', ''),
+        'department': data.get('department', ''),
+        'start_date': data.get('start_date', ''),
+        'end_date': data.get('end_date', ''),
         'current_date': current_date,
         'signature_date': current_date,
-        'signature': '[Student Signature]'  # Default placeholder
+        'signature': '[Student Signature]',
+        'subto': data.get('subto', '')
     }
 
-    if data['subto'] != "Principal":
+
+    if data.get('subto') == "Principal":
+        template_data['recipient_address'] = "The Principal\nSt. Joseph's College of Engineering and Technology\nPalai"
+    else:
         faculty_info = faculty_df[faculty_df['Faculty'] == data['subto']]
-        template_data.update({
-            'faculty_designation': faculty_info.iloc[0]['Designation'] if not faculty_info.empty else "",
-            'faculty_department': faculty_info.iloc[0]['Department'] if not faculty_info.empty else ""
-        })
+        if not faculty_info.empty:
+            template_data['recipient_address'] = f"{data['subto']}\n{faculty_info.iloc[0]['Designation']}\n{faculty_info.iloc[0]['Department']}\nSt. Joseph's College of Engineering and Technology\nPalai"
+        else:
+            template_data['recipient_address'] = f"{data['subto']}\nSt. Joseph's College of Engineering and Technology\nPalai"
+
 
     # Generate letter content
-    if data['template'] == "AI-generated":
+    if data.get('template') == "AI-generated":
         letter_content = generate_ai_leave_letter(data, faculty_df)
     else:
-        template = templates.get(data['template'])
-        letter_content = template.format(**template_data)
+        try:
+            template = templates.get(data['template'], '')
+            letter_content = template.format(**template_data)
+        except KeyError as e:
+            st.error(f"Template error: Missing field {e}")
+            return
+        except Exception as e:
+            st.error(f"Error generating letter: {str(e)}")
+            return
 
     # PDF generation with signature handling
     pdf = FPDF()
@@ -383,18 +404,112 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         pdf.image("temp_signature.png", x=10, y=pdf.get_y(), w=30, h=20)
         os.remove("temp_signature.png")
 
-    # Generate and offer download
+    # Generate and save PDF
     output_file = f"{data['user'].replace(' ', '_')}_leave_letter.pdf"
-    pdf.output(output_file)
+    pdf_data = pdf.output(dest='S').encode('latin1')
 
-    with open(output_file, "rb") as file:
-        st.download_button("📥 Download Leave Letter", file, file_name=output_file, mime="application/pdf")
+    # Store everything in session state if not already stored
+    if 'pdf_generated' not in st.session_state:
+        st.session_state.pdf_data = pdf_data
+        st.session_state.pdf_filename = output_file
+        st.session_state.user_data = data
+        st.session_state.pdf_generated = True
+        st.session_state.generation_time = time()
+        
+    # Create columns for buttons (change from 3 to 2 columns)
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.download_button(
+            "📥 Download Letter",
+            st.session_state.pdf_data,
+            file_name=st.session_state.pdf_filename,
+            mime="application/pdf",
+            key="download_btn"
+        )
+    
+    with col2:
+        if st.button("📧 Send to Copy Shop", key="email_btn"):
+            success = send_to_copy_shop(
+                st.session_state.pdf_data,
+                st.session_state.pdf_filename,
+                st.session_state.user_data['user'],
+                st.session_state.user_data['department']
+            )
+            if success:
+                st.success("✅ PDF sent to copy shop successfully!")
+            else:
+                st.error("❌ Failed to send PDF to copy shop")
+
+    # Add timer display
+    remaining_time = 180 - int(time() - st.session_state.generation_time)
+    if remaining_time > 0:
+        st.info(f"⏳ Session expires in: {remaining_time} seconds")
+    else:
+        st.warning("⚠️ Session expired! Redirecting to start...")
+        reset_app()
+        return
+
+    # Add status indicators
+    if 'download_complete' in st.session_state:
+        st.success("✅ Letter downloaded successfully!")
+    
+    if 'email_sent' in st.session_state:
+        st.success("✅ Letter sent to copy shop!")
+
+def send_to_copy_shop(pdf_data, filename, student_name, department):
+    try:
+        SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
+        COPY_SHOP_EMAIL = os.getenv('COPY_SHOP_EMAIL')
+        # Encode PDF in base64
+        encoded_file = base64.b64encode(pdf_data).decode()
+
+        # Create mail message
+        message = Mail(
+            from_email='dutyfreesjcet@gmail.com',  # Update this
+            to_emails=COPY_SHOP_EMAIL,
+            subject=f'Leave Letter - {student_name} ({department})',
+            plain_text_content=f'Please find attached the leave letter for {student_name} from {department}.'
+        )
+
+        # Add attachment
+        attachment = Attachment(
+            FileContent(encoded_file),
+            FileName(filename),
+            FileType('application/pdf'),
+            Disposition('attachment')
+        )
+        message.attachment = attachment
+
+        # Send email
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        return response.status_code == 202
+
+    except Exception as e:
+        st.error(f"Error sending email: {str(e)}")
+        return False
+    
+def reset_app():
+    """Helper function to reset the application state"""
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
 
 def main():
-    faculty_df = load_faculty_list()  # Load faculty list at the start
-    leave_data, signature_path = chat_interface()
-    if leave_data:
-        generate_leave_letter(leave_data, load_templates(), faculty_df, signature_path)
+    if 'pdf_generated' not in st.session_state:
+        faculty_df = load_faculty_list()
+        leave_data, signature_path = chat_interface()
+        if leave_data:
+            generate_leave_letter(leave_data, load_templates(), faculty_df, signature_path)
+    else:
+        # Just show the buttons and stored PDF if already generated
+        generate_leave_letter(
+            st.session_state.user_data, 
+            load_templates(), 
+            load_faculty_list(), 
+            None
+        )
 
 if __name__ == "__main__":
     main()
