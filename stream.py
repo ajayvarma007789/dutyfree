@@ -9,12 +9,13 @@ from dotenv import load_dotenv
 from groq import Groq  
 from PIL import Image
 import io
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 import base64
 from time import time
 
-# Load Templates
 def load_templates():
     try:
         with open("templates.json", "r") as file:
@@ -23,7 +24,6 @@ def load_templates():
         st.error("❌ templates.json file is missing or invalid!")
         st.stop()
 
-# Load Faculty List
 def load_faculty_list():
     try:
         return pd.read_excel("facultylist.xlsx")
@@ -33,7 +33,6 @@ def load_faculty_list():
 
 faculty_df = load_faculty_list()
 
-# Validation Functions
 def validate_date(date_obj):
     if not date_obj:
         return None
@@ -42,7 +41,6 @@ def validate_date(date_obj):
 def validate_contact(number):
     return number if re.fullmatch(r"\d{10,12}", number) else None
 
-# AI Leave Letter Generation
 def generate_ai_leave_letter(data, faculty_df):
     load_dotenv()
     api_key = os.getenv("GROQ_API_KEY")
@@ -52,7 +50,6 @@ def generate_ai_leave_letter(data, faculty_df):
     
     client = Groq(api_key=api_key)
     
-    # Get faculty designation 
     faculty_designation = ""
     recipient_line = ""
     sir_madam = ""
@@ -115,7 +112,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Chat Interface Logic
 def chat_interface():
     st.title("💬 DutyFree\nGenerate your apolegy/leave letter within 30sec.\n An AI tool for SJCET Students")
 
@@ -261,7 +257,6 @@ def chat_interface():
                 st.session_state.messages.append({"role": "assistant", "text": questions[st.session_state.step]})
                 st.rerun()
             
-            # Create a container for date selection
             date_container = st.container()
             
             with date_container:
@@ -274,7 +269,6 @@ def chat_interface():
                 
                 st.write("")
                 
-                # Navigation buttons in separate columns below
                 col1, col2, col3 = st.columns([1, 0.1, 1])
                 
                 with col1:
@@ -367,7 +361,6 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         else:
             template_data['recipient_address'] = f"{data['subto']}\nSt. Joseph's College of Engineering and Technology\nPalai"
 
-
     # Generate letter content
     if data.get('template') == "AI-generated":
         letter_content = generate_ai_leave_letter(data, faculty_df)
@@ -382,7 +375,7 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
             st.error(f"Error generating letter: {str(e)}")
             return
 
-    # PDF generation with signature handling
+    # PDF Generation
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
@@ -393,10 +386,8 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         signature_img = signature_img.resize((50, 100), Image.LANCZOS)
         signature_img.save("temp_signature.png")
         
-        # Replace signature placeholder
         letter_content = letter_content.replace('[Student Signature]', '')
 
-    # Write PDF content
     pdf.multi_cell(0, 8, letter_content)
     
     # Add signature image if uploaded
@@ -404,7 +395,6 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         pdf.image("temp_signature.png", x=10, y=pdf.get_y(), w=30, h=20)
         os.remove("temp_signature.png")
 
-    # Generate and save PDF
     output_file = f"{data['user'].replace(' ', '_')}_leave_letter.pdf"
     pdf_data = pdf.output(dest='S').encode('latin1')
 
@@ -416,7 +406,6 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         st.session_state.pdf_generated = True
         st.session_state.generation_time = time()
         
-    # Create columns for buttons (change from 3 to 2 columns)
     col1, col2 = st.columns(2)
     
     with col1:
@@ -441,7 +430,7 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
             else:
                 st.error("❌ Failed to send PDF to copy shop")
 
-    # Add timer display
+    # timer display
     remaining_time = 180 - int(time() - st.session_state.generation_time)
     if remaining_time > 0:
         st.info(f"⏳ Session expires in: {remaining_time} seconds")
@@ -450,7 +439,7 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
         reset_app()
         return
 
-    # Add status indicators
+    # status indicators
     if 'download_complete' in st.session_state:
         st.success("✅ Letter downloaded successfully!")
     
@@ -459,32 +448,29 @@ def generate_leave_letter(data, templates, faculty_df, signature_path=None):
 
 def send_to_copy_shop(pdf_data, filename, student_name, department):
     try:
-        SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
+        GMAIL_USER = os.getenv('GMAIL_USER')
+        GMAIL_PASSWORD = os.getenv('GMAIL_APP_PASSWORD')
         COPY_SHOP_EMAIL = os.getenv('COPY_SHOP_EMAIL')
-        # Encode PDF in base64
-        encoded_file = base64.b64encode(pdf_data).decode()
 
-        # Create mail message
-        message = Mail(
-            from_email='dutyfreesjcet@gmail.com',  # Update this
-            to_emails=COPY_SHOP_EMAIL,
-            subject=f'Leave Letter - {student_name} ({department})',
-            plain_text_content=f'Please find attached the leave letter for {student_name} from {department}.'
-        )
+        # Create message
+        message = MIMEMultipart()
+        message['From'] = GMAIL_USER
+        message['To'] = COPY_SHOP_EMAIL
+        message['Subject'] = f'Leave Letter - {student_name} ({department})'
 
-        # Add attachment
-        attachment = Attachment(
-            FileContent(encoded_file),
-            FileName(filename),
-            FileType('application/pdf'),
-            Disposition('attachment')
-        )
-        message.attachment = attachment
+        body = f'Please find attached the leave letter for {student_name} from {department}.'
+        message.attach(MIMEText(body, 'plain'))
 
-        # Send email
-        sg = SendGridAPIClient(SENDGRID_API_KEY)
-        response = sg.send(message)
-        return response.status_code == 202
+        pdf_attachment = MIMEApplication(pdf_data, _subtype='pdf')
+        pdf_attachment.add_header('Content-Disposition', 'attachment', filename=filename)
+        message.attach(pdf_attachment)
+
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.login(GMAIL_USER, GMAIL_PASSWORD)
+        
+        server.send_message(message)
+        server.quit()
+        return True
 
     except Exception as e:
         st.error(f"Error sending email: {str(e)}")
@@ -503,7 +489,6 @@ def main():
         if leave_data:
             generate_leave_letter(leave_data, load_templates(), faculty_df, signature_path)
     else:
-        # Just show the buttons and stored PDF if already generated
         generate_leave_letter(
             st.session_state.user_data, 
             load_templates(), 
